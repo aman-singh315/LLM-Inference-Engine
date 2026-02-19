@@ -1,6 +1,6 @@
 # LLM Inference Engine with Continuous Batching & Paged KV Cache
 
-##**A minimal yet production-inspired from vLLM & implementation of a high-throughput LLM inference engine featuring:**
+## **A minimal yet production-inspired from vLLM & implementation of a high-throughput LLM inference engine featuring:**
  - Continuous batching
  - Dynamic request scheduling
  - Paged KV-cache memory management
@@ -10,7 +10,7 @@
 **This project demonstrates how modern inference systems optimize GPU utilization during autoregressive generation.**
 
 
-#Motivation
+## Motivation
 
 **Naive LLM inference processes one request at a time.
 Modern inference engines maximize hardware efficiency by:**
@@ -21,7 +21,7 @@ Modern inference engines maximize hardware efficiency by:**
  - Avoiding full-sequence recomputation
  - This project implements those ideas from scratch in PyTorch.
 
-##**Architechture**
+## **Architechture**
 Scheduler  →  BlockPool → ContinuousEngine 
   **1. Scheduler**
   - Maintains waiting queue
@@ -53,7 +53,7 @@ Scheduler  →  BlockPool → ContinuousEngine
   - Device-agnostic execution (CPU / CUDA)
 
 
-##Project-Structure
+## Project-Structure
 llm-inference-engine/
 │
 ├── engine/
@@ -67,7 +67,7 @@ llm-inference-engine/
 └── README.md
 
 
-##--- Submitted initial requests ---
+## --- Submitted initial requests ---
 Prefill batch size 8 | 0.0325s
 [Alloc] Block 127
 ...
@@ -78,3 +78,29 @@ Throughput: 171.86 tokens/sec
 Total decode steps: 245
 
 
+## Performance
+
+ ```The benchmark measures:```
+  - Total decode steps
+  - Total tokens generated
+  - End-to-end runtime
+  - Tokens per second (throughput)
+  - Throughput depends on:
+  - GPU hardware
+  - Batch size
+  - Model size
+  - Block configuration
+
+## Technical Highlights
+ **KV-cache stored as:**
+   [num_layers, total_blocks, num_heads, block_size, head_dim]
+
+## Future Improvements
+  - Custom CUDA kernels
+  - FlashAttention implementation
+  - Speculative decoding
+  - Quantization support
+  - Streaming output API
+
+## License
+  MIT License
