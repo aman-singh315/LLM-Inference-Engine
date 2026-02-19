@@ -1,4 +1,30 @@
+import torch
 import time
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+from engine.request import Request
+from engine.scheduler import Scheduler
+from engine.continuous_engine import ContinuousEngine
+
+# Device Agnostic code
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load Model
+
+model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.float16,
+    device_map="auto"
+)
+
+model.config.use_cache = True
+model.eval()
+
 
 # Configuration
 MAX_BATCH_SIZE = 8
