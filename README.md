@@ -23,23 +23,24 @@ Modern inference engines maximize hardware efficiency by:**
 
 ## **Architechture**
 Scheduler  →  BlockPool → ContinuousEngine 
-  **1. Scheduler**
-  - Maintains waiting queue
-  - Controls active batch size
-  - Supports dynamic injection during decoding
-  - Tracks completed requests
 
-  **2. BlockPool (Paged KV Cache)**
-  - Preallocates KV memory blocks
-  - Dynamically allocates per request
-  - Frees blocks after completion
-  - Enables memory reuse across generations
+ **1. Scheduler**
+   - Maintains waiting queue
+   - Controls active batch size
+   - Supports dynamic injection during decoding
+   - Tracks completed requests
 
-    **3. Continuous Engine**
-  - Handles prefill stage
-  - Performs step-by-step decoding
-  - Manages KV-cache updates
-  - Cleans up finished requests
+ **2. BlockPool (Paged KV Cache)**
+   - Preallocates KV memory blocks
+   - Dynamically allocates per request
+   - Frees blocks after completion
+   - Enables memory reuse across generations
+
+ **3. Continuous Engine**
+   - Handles prefill stage
+   - Performs step-by-step decoding
+   - Manages KV-cache updates
+   - Cleans up finished requests
 
 **This simulates the design used in modern inference systems such as vLLM-style paged attention.**
 
@@ -71,16 +72,16 @@ llm-inference-engine/
 Prefill batch size 8 | 0.0325s
 [Alloc] Block 127
 ...
-===== CONTINUOUS BATCH TEST COMPLETE =====
-Total time: 9.8920s
-Total tokens generated: 1700
-Throughput: 171.86 tokens/sec
-Total decode steps: 245
+ ===== CONTINUOUS BATCH TEST COMPLETE ===== 
+  Total time: 9.4969s 
+  Total tokens generated: 4352 
+  Throughput: 458.26 tokens/sec 
+  Total decode steps: 132
 
 
 ## Performance
 
- ```The benchmark measures:```
+ **The benchmark measures:**
   - Total decode steps
   - Total tokens generated
   - End-to-end runtime
@@ -101,6 +102,5 @@ Total decode steps: 245
   - Speculative decoding
   - Quantization support
   - Streaming output API
-
 ## License
   MIT License
