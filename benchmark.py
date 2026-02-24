@@ -27,8 +27,8 @@ model.eval()
 
 
 # Configuration
-MAX_BATCH_SIZE = 8
-MAX_NEW_TOKENS = 50
+MAX_BATCH_SIZE = 42
+MAX_NEW_TOKENS = 128
 
 # Create Scheduler + Engine
 scheduler = Scheduler(max_active=MAX_BATCH_SIZE)
