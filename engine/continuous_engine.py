@@ -16,7 +16,7 @@ class ContinuousEngine:
     config = model.config
 
     self.block_pool = BlockPool(
-      total_blocks=128,
+      total_blocks=2500,
       block_size=self.block_size,
       num_layers=config.num_hidden_layers,
       num_heads=config.num_key_value_heads,
