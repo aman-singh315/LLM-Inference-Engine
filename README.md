@@ -129,7 +129,7 @@ python benchmark.py
 ## Related Projects
 
 - [Flash Attention CUDA Kernel](../flash-attention) — custom CUDA kernel implementing Flash Attention v2 with warp-level shuffle reductions. Benchmarked against cuBLAS baseline.
-- [GEMM CUDA Kernel](../GeMM-CUDA-KERNEL) — full tiling hierarchy from block → warp → register level.
+- [GEMM CUDA Kernel](https://github.com/aman-singh315/GeMM-CUDA-KERNEL) — full tiling hierarchy from block → warp → register level.
 
 ---
 
