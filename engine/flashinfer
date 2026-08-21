@@ -1,0 +1,97 @@
+from transformers.cache_utils import DynamicCache
+from torch.profiler import profile, ProfilerActivity
+import torch
+import time
+from transformers.models.llama.modeling_llama import apply_rotary_pos_emb
+
+def flashinfer_decode(
+    query,
+    key_cache,
+    value_cache,
+    block_table,
+    seq_len,
+    block_size,
+):
+    """
+    Run one decode attention step using FlashInfer paged KV cache.
+
+    query:
+        [1, num_q_heads, head_dim]
+
+    key_cache:
+        [num_blocks, num_kv_heads, block_size, head_dim]
+
+    value_cache:
+        [num_blocks, num_kv_heads, block_size, head_dim]
+
+    block_table:
+        [num_blocks_for_request]
+
+    seq_len:
+        Number of valid tokens currently in the request.
+
+    block_size:
+        Number of tokens stored per KV block.
+    """
+
+    device = query.device
+
+    # 1. Create the page/block table
+
+    block_table = torch.tensor(
+        block_table,
+        dtype=torch.int32,
+        device=device,
+    ).view(1, -1)
+
+    # 2. Sequence length for this request
+
+    seq_lens = torch.tensor(
+        [seq_len],
+        dtype=torch.int32,
+        device=device,
+    )
+
+    # 3. Create the FlashInfer decode wrapper
+
+    workspace_buffer = torch.empty(
+        32 * 1024 * 1024,
+        dtype=torch.uint8,
+        device=device,
+    )
+
+    wrapper = flashinfer.BatchDecodeWithPagedKVCacheWrapper(
+        workspace_buffer,
+        kv_layout="HND",
+    )
+
+    # 4. Tell FlashInfer how the pages are organized
+
+    wrapper.plan(
+        indptr=torch.tensor(
+            [0, len(block_table[0])],
+            dtype=torch.int32,
+            device=device,
+        ),
+        indices=block_table.flatten(),
+        last_page_len=torch.tensor(
+            [seq_len % block_size if seq_len % block_size != 0 else block_size],
+            dtype=torch.int32,
+            device=device,
+        ),
+        num_qo_heads=query.shape[1],
+        num_kv_heads=key_cache.shape[1],
+        head_dim=query.shape[-1],
+        page_size=block_size,
+        pos_encoding_mode="NONE",
+    )
+
+    # 5. Run paged attention
+
+    output = wrapper.run(
+        query,
+        key_cache,
+        value_cache,
+    )
+
+    return output
