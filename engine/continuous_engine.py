@@ -33,13 +33,6 @@ class ContinuousEngine:
     #right padding so prompt tokens occupy [0 : prompt_len]
     self.tokenizer.padding_side = "right"
 
-
-    # NEW: grab direct references to the model's internal layers.
-    # We are NOT copying weights — these are references to the
-    # same nn.Module objects HF already loaded. We're just going
-    # to call their sub-pieces (norm, proj, mlp) ourselves instead
-    # of letting HF's LlamaModel.forward() orchestrate them.
-
     llama_model = model.model
     self.embed_tokens = llama_model.embed_tokens
     self.layers = llama_model.layers
@@ -158,13 +151,7 @@ class ContinuousEngine:
     batch_size = len(active_reqs)
     device = self.device
 
-    # --------------------------------------------------------
-    # STEP 2a: figure out where the NEW token for each request
-    # is going to live (which block, which offset) BEFORE we
-    # write anything — we need this decided first because the
-    # FlashInfer paged-attention call needs to read the cache
-    # AFTER the new token's k/v are already written into it.
-    # --------------------------------------------------------
+  
     new_token_block_ids = []   # block id that will hold this step's new token, per request
     new_token_offsets = []     # offset inside that block, per request
     position_ids_list = []     # absolute position of the new token, per request
@@ -195,24 +182,13 @@ class ContinuousEngine:
         [[p] for p in position_ids_list],
         dtype=torch.long, device=device
     )  # [batch, 1]
-
-    # --------------------------------------------------------
-    # STEP 2c: embed the new token -> [batch, 1, hidden_size]
-    # (this replaces the embedding step that used to happen
-    # silently inside self.model(...))
-    # --------------------------------------------------------
+  
     hidden_states = self.embed_tokens(last_tokens)
 
     # RoPE cos/sin computed ONCE per step and reused by every layer
     # (this is what llama_model.rotary_emb used to do internally per forward call)
     cos, sin = self.rotary_emb(hidden_states, position_ids)
 
-    # --------------------------------------------------------
-    # STEP 2d: build the FlashInfer BATCH metadata ONCE for this
-    # step — NOT per request, NOT per layer. This is what actually
-    # fixes issue #3 from the original list (the draft was calling
-    # plan()/run() per-request in a loop, which defeats batching).
-    # --------------------------------------------------------
     block_counts = [len(req.state.block_ids) for req in active_reqs]
 
     # indptr: cumulative offsets into `indices` marking where each
@@ -228,9 +204,8 @@ class ContinuousEngine:
         dtype=torch.int32, device=device
     )
 
-    # last_page_len: how many valid tokens are in each request's LAST
-    # (most recently allocated) block, AFTER we've accounted for the
-    # new token we're about to write this step.
+    # last_page_len -> how many valid tokens are in each request's LAST
+ 
     last_page_len = torch.tensor(
         [
             ((req.state.total_tokens + 1 - 1) % self.block_size) + 1
@@ -256,23 +231,12 @@ class ContinuousEngine:
         data_type=torch.float16,
     )
 
-    # --------------------------------------------------------
-    # STEP 2e: run every decoder layer BY HAND.
     # This block replaces what self.model(...) used to do internally.
-    # --------------------------------------------------------
     for layer_idx, layer in enumerate(self.layers):
 
         residual = hidden_states
         hidden_states = layer.input_layernorm(hidden_states)
 
-        # ---- QKV projections ----
-        # q = layer.self_attn.q_proj(hidden_states)  # [batch, 1, num_q_heads * head_dim]
-        # k = layer.self_attn.k_proj(hidden_states)  # [batch, 1, num_kv_heads * head_dim]
-        # v = layer.self_attn.v_proj(hidden_states)  # [batch, 1, num_kv_heads * head_dim]
-
-        # q = q.view(batch_size, self.num_q_heads, self.head_dim)   # drop the seq=1 dim, split heads
-        # k = k.view(batch_size, self.num_kv_heads, self.head_dim)
-        # v = v.view(batch_size, self.num_kv_heads, self.head_dim)
 
         # ---- fused QKV projection ----
         qkv = torch.nn.functional.linear(hidden_states, self.fused_qkv_weights[layer_idx])
@@ -288,8 +252,7 @@ class ContinuousEngine:
         k = k.squeeze(2)  # back to [batch, num_kv_heads, head_dim]
 
         # ---- write this new token's K/V into the paged cache BEFORE attention ----
-        # (flashinfer reads directly from block_pool.keys/values, so the new
-        # token has to be in there first, or it'll attend over stale/missing data)
+
         for i in range(batch_size):
             b_id = new_token_block_ids[i]
             off = new_token_offsets[i]
@@ -314,18 +277,16 @@ class ContinuousEngine:
         hidden_states = layer.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
-    # --------------------------------------------------------
     # STEP 2f: final norm + lm_head -> logits, same as HF does at the end
-    # --------------------------------------------------------
+ 
     hidden_states = self.final_norm(hidden_states)
     logits = self.lm_head(hidden_states)  # [batch, 1, vocab_size]
 
     next_tokens = logits[:, -1, :].argmax(dim=-1)
 
-    # --------------------------------------------------------
-    # STEP 2g: request bookkeeping (same as before — no gather_kv,
+ 
     # no _write_single_token_kv, since we already wrote K/V above)
-    # --------------------------------------------------------
+
     for i, req in enumerate(active_reqs):
         token = next_tokens[i].item()
         req.last_token = next_tokens[i].view(1, 1)
